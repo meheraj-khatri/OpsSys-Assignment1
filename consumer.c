@@ -8,14 +8,14 @@ void *consumer_thread(void *arg) {
     SharedBuffer *shm = resources.shm_ptr;
 
     while (1) { // Runs continuously until manually stopped
-        // 1. Wait for a full slot (wait if buffer is empty)
+        // Wait for a full slot (wait if buffer is empty)
         // When there are no items, the consumer will wait. [cite: 13]
         if (sem_wait(resources.full_sem) == -1) {
             perror("Consumer: sem_wait(full) failed");
             break;
         }
 
-        // 2. Wait for mutual exclusion (lock the buffer)
+        // Wait for mutual exclusion (lock the buffer)
         if (sem_wait(resources.mutex_sem) == -1) {
             perror("Consumer: sem_wait(mutex) failed");
             sem_post(resources.full_sem); 
@@ -28,7 +28,7 @@ void *consumer_thread(void *arg) {
         shm->buffer[shm->out] = 0; // Clear the slot
         shm->out = (shm->out + 1) % BUFFER_SIZE;
 
-        // 3. Signal mutual exclusion (unlock the buffer)
+        // Signal mutual exclusion (unlock the buffer)
         if (sem_post(resources.mutex_sem) == -1) {
             perror("Consumer: sem_post(mutex) failed");
             break;
@@ -58,18 +58,18 @@ int main() {
     srand(time(NULL) * getpid()); // Seed for random numbers
     sleep(1); // Give producer time to create resources
 
-    // --- 1. Link to Shared Memory ---
+    // Link to Shared Memory
     int shm_fd = shm_open(SHM_NAME, O_RDWR, 0666);
     if (shm_fd == -1) { perror("shm_open failed. Ensure producer is running first."); exit(EXIT_FAILURE); }
     resources.shm_ptr = (SharedBuffer *)mmap(0, sizeof(SharedBuffer), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
     close(shm_fd);
     
-    // --- 2. Link to Semaphores ---
+    // Link to Semaphores
     resources.empty_sem = sem_open(SEM_EMPTY, 0); 
     resources.full_sem  = sem_open(SEM_FULL, 0);
     resources.mutex_sem = sem_open(SEM_MUTEX, 0);
 
-    // --- 3. Start Consumer Thread ---
+    // Start Consumer Thread
     pthread_t con_tid;
     printf("Starting Consumer process...\n");
 
