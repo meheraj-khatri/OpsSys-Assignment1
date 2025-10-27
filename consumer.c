@@ -1,104 +1,85 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/mman.h>
-#include <semaphore.h>
-#include <pthread.h>
-
 #include "global.h"
 
-// Pointers to the shared resources
-shared_data_t *shared_mem;
-sem_t *mutex;
-sem_t *full;    // Number of occupied slots
-sem_t *empty;   // Number of empty slots
+// Global shared resources
+SharedResources resources;
 
-// Thread function for the consumer
-void* consumer_thread(void* arg) {
-    int item_consumed;
-    int items_count = 0;
+// The thread function for the consumer
+void *consumer_thread(void *arg) {
+    SharedBuffer *shm = resources.shm_ptr;
 
-    while (items_count < MAX_ITEMS) {
-        
-        // Wait for a full slot (wait if buffer is empty) 
-        sem_wait(full);
-        
-        // Wait for mutual exclusion (critical section entry) 
-        sem_wait(mutex);
+    while (1) { // Runs continuously until manually stopped
+        // 1. Wait for a full slot (wait if buffer is empty)
+        // When there are no items, the consumer will wait. [cite: 13]
+        if (sem_wait(resources.full_sem) == -1) {
+            perror("Consumer: sem_wait(full) failed");
+            break;
+        }
 
-        // --- Critical Section Start ---
-        
-        // 1. Pick up item
-        item_consumed = shared_mem->buffer[shared_mem->out];
-        printf("Consumer: Consumed %d at index %d. Buffer count: %d\n", 
-               item_consumed, shared_mem->out, shared_mem->counter - 1);
-        fflush(stdout);
+        // 2. Wait for mutual exclusion (lock the buffer)
+        if (sem_wait(resources.mutex_sem) == -1) {
+            perror("Consumer: sem_wait(mutex) failed");
+            sem_post(resources.full_sem); 
+            break;
+        }
 
-        // 2. Update indices and counter
-        shared_mem->out = (shared_mem->out + 1) % BUFFER_SIZE;
-        shared_mem->counter--;
-        items_count++;
-        
-        // --- Critical Section End ---
-        
-        // Signal that mutual exclusion is released
-        sem_post(mutex);
-        
-        // Signal that a slot is empty (slot is ready for production)
-        sem_post(empty);
-        
-        // Wait a short, random amount of time before consuming the next item
-        usleep(rand() % 600000 + 50000);
+        // Critical Section: Consume item
+        int item = shm->buffer[shm->out];
+        printf("Consumer consumed item: %d from index %d\n", item, shm->out);
+        shm->buffer[shm->out] = 0; // Clear the slot
+        shm->out = (shm->out + 1) % BUFFER_SIZE;
+
+        // 3. Signal mutual exclusion (unlock the buffer)
+        if (sem_post(resources.mutex_sem) == -1) {
+            perror("Consumer: sem_post(mutex) failed");
+            break;
+        }
+
+        // 4. Signal an empty slot (increase count of empty slots)
+        if (sem_post(resources.empty_sem) == -1) {
+            perror("Consumer: sem_post(empty) failed");
+            break;
+        }
+
+        // Simulate work time
+        usleep(rand() % 1000000 + 500000); // Sleep for 0.5 to 1.5 seconds
     }
-
-    printf("\n--- Consumer is done consuming %d items. ---\n", MAX_ITEMS);
-    return NULL;
+    pthread_exit(NULL);
 }
 
-
+// Function to clean up shared resources (only closing handles here)
+void cleanup() {
+    sem_close(resources.empty_sem);
+    sem_close(resources.full_sem);
+    sem_close(resources.mutex_sem);
+    munmap(resources.shm_ptr, sizeof(SharedBuffer));
+    printf("\nConsumer cleanup complete.\n");
+}
 int main() {
-    int shm_fd;
+    srand(time(NULL) * getpid()); // Seed for random numbers
+    sleep(1); // Give producer time to create resources
 
-    // Give producer time to initialize resources (wait 1 second)
-    sleep(1);
-
-    // 1. Open shared memory object (O_RDWR, no O_CREAT)
-    shm_fd = shm_open(SHM_NAME, O_RDWR, 0666);
-    if (shm_fd == -1) {
-        perror("shm_open failed. Did producer run first?");
-        exit(1);
-    }
-
-    // Map the shared memory segment
-    shared_mem = mmap(NULL, sizeof(shared_data_t), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
-    if (shared_mem == MAP_FAILED) {
-        perror("mmap failed");
-        exit(1);
-    }
-
-    // 2. Open named semaphores (no O_CREAT, second param 0)
-    mutex = sem_open(SEM_MUTEX, 0);
-    full = sem_open(SEM_FULL, 0);
-    empty = sem_open(SEM_EMPTY, 0);
-
-    if (mutex == SEM_FAILED || full == SEM_FAILED || empty == SEM_FAILED) {
-        perror("sem_open failed. Did producer initialize semaphores?");
-        exit(1);
-    }
-
-    // 3. Create consumer thread and wait for it to finish
-    pthread_t cons_thread;
-    pthread_create(&cons_thread, NULL, consumer_thread, NULL);
-    pthread_join(cons_thread, NULL);
-
-    // 4. Cleanup Resources (Consumer only closes and unmaps)
-    sem_close(mutex);
-    sem_close(full);
-    sem_close(empty);
-    
-    munmap(shared_mem, sizeof(shared_data_t));
+    // --- 1. Link to Shared Memory ---
+    int shm_fd = shm_open(SHM_NAME, O_RDWR, 0666);
+    if (shm_fd == -1) { perror("shm_open failed. Ensure producer is running first."); exit(EXIT_FAILURE); }
+    resources.shm_ptr = (SharedBuffer *)mmap(0, sizeof(SharedBuffer), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
     close(shm_fd);
+    
+    // --- 2. Link to Semaphores ---
+    resources.empty_sem = sem_open(SEM_EMPTY, 0); 
+    resources.full_sem  = sem_open(SEM_FULL, 0);
+    resources.mutex_sem = sem_open(SEM_MUTEX, 0);
 
+    // --- 3. Start Consumer Thread ---
+    pthread_t con_tid;
+    printf("Starting Consumer process...\n");
+
+    if (pthread_create(&con_tid, NULL, consumer_thread, NULL) != 0) {
+        perror("pthread_create failed");
+        cleanup();
+        exit(EXIT_FAILURE);
+    }
+
+    pthread_join(con_tid, NULL); // Wait for the thread (will wait indefinitely)
+    cleanup();
     return 0;
 }

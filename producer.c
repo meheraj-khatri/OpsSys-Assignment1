@@ -1,137 +1,104 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/mman.h>
-#include <semaphore.h>
-#include <pthread.h>
-#include <time.h>
-#include <errno.h>
-
 #include "global.h"
 
-// Pointers to the shared resources
-shared_data_t *shared_mem;
-sem_t *mutex;
-sem_t *full;    // Counting semaphore: Number of occupied slots (items available for consumption)
-sem_t *empty;   // Counting semaphore: Number of empty slots (slots available for production)
+// Global shared resources
+SharedResources resources;
 
-// Thread function for the producer
-void* producer_thread(void* arg) {
-    int item_produced;
-    int items_count = 0;
-    
-    // Seed the random number generator
-    srand(time(NULL) + getpid());
+// The thread function for the producer
+void *producer_thread(void *arg) {
+    int item_counter = 0;
+    SharedBuffer *shm = resources.shm_ptr;
 
-    while (items_count < MAX_ITEMS) {
-        
-        // Wait for an empty slot (wait if buffer is full) 
-        sem_wait(empty);
-        
-        // Wait for mutual exclusion (critical section entry) 
-        sem_wait(mutex);
+    while (1) { // Runs continuously until manually stopped
+        // 1. Wait for an empty slot (wait if buffer is full)
+        // When the table is completed, the producer will wait. [cite: 12]
+        if (sem_wait(resources.empty_sem) == -1) {
+            perror("Producer: sem_wait(empty) failed");
+            break;
+        }
 
-        // --- Critical Section Start ---
-        
-        // 1. Generate item
-        item_produced = rand() % 100 + 1; // Generate a random item
-        
-        // 2. Put item onto the table
-        shared_mem->buffer[shared_mem->in] = item_produced;
-        printf("Producer: Produced %d at index %d. Buffer count: %d\n", 
-               item_produced, shared_mem->in, shared_mem->counter + 1);
-        fflush(stdout);
+        // 2. Wait for mutual exclusion (lock the buffer)
+        if (sem_wait(resources.mutex_sem) == -1) {
+            perror("Producer: sem_wait(mutex) failed");
+            sem_post(resources.empty_sem); 
+            break;
+        }
 
-        // 3. Update indices and counter
-        shared_mem->in = (shared_mem->in + 1) % BUFFER_SIZE;
-        shared_mem->counter++;
-        items_count++;
+        // --- Critical Section: Produce item ---
+        int item = ++item_counter;
+        // Generate a random-looking number instead of just the counter for better demo
+        item = (rand() % 900) + 100; 
+        shm->buffer[shm->in] = item;
+        printf("Producer produced item: %d at index %d\n", item, shm->in);
+        shm->in = (shm->in + 1) % BUFFER_SIZE;
+        // -------------------------------------
 
-        // --- Critical Section End ---
-        
-        // Signal that mutual exclusion is released
-        sem_post(mutex);
-        
-        // Signal that a slot is full (item is ready for consumption)
-        sem_post(full);
-        
-        // Wait a short, random amount of time before producing the next item
-        usleep(rand() % 500000 + 100000); 
+        // 3. Signal mutual exclusion (unlock the buffer)
+        if (sem_post(resources.mutex_sem) == -1) {
+            perror("Producer: sem_post(mutex) failed");
+            break;
+        }
+
+        // 4. Signal a full slot (increase count of items)
+        if (sem_post(resources.full_sem) == -1) {
+            perror("Producer: sem_post(full) failed");
+            break;
+        }
+
+        // Simulate work time (optional, but helps demonstrate interleaving)
+        usleep(rand() % 1000000 + 500000); // Sleep for 0.5 to 1.5 seconds
     }
-
-    printf("\n--- Producer is done producing %d items. ---\n", MAX_ITEMS);
-    return NULL;
+    pthread_exit(NULL);
 }
 
+// Function to clean up shared resources before exit
+void cleanup() {
+    // Close and Unlink semaphores and shared memory (best done by the creator)
+    sem_close(resources.empty_sem);
+    sem_close(resources.full_sem);
+    sem_close(resources.mutex_sem);
+    sem_unlink(SEM_EMPTY);
+    sem_unlink(SEM_FULL);
+    sem_unlink(SEM_MUTEX);
+    munmap(resources.shm_ptr, sizeof(SharedBuffer));
+    shm_unlink(SHM_NAME);
+    printf("\nProducer cleanup complete.\n");
+}
 
 int main() {
-    int shm_fd;
-
-    // 1. Create and configure shared memory object
-    // O_CREAT: Create the object if it does not exist
-    shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
-    if (shm_fd == -1) {
-        perror("shm_open failed");
-        exit(1);
-    }
-    
-    // Configure the size of the shared memory segment
-    ftruncate(shm_fd, sizeof(shared_data_t));
-
-    // Map the shared memory segment to the address space of the process
-    shared_mem = mmap(NULL, sizeof(shared_data_t), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
-    if (shared_mem == MAP_FAILED) {
-        perror("mmap failed");
-        exit(1);
-    }
-
-    // 2. Initialize the shared structure data
-    shared_mem->in = 0;
-    shared_mem->out = 0;
-    shared_mem->counter = 0;
-
-    // 3. Create and initialize named semaphores (O_CREAT)
-    
-    // Mutex (Initial value 1 for mutual exclusion) 
-    mutex = sem_open(SEM_MUTEX, O_CREAT, 0666, 1);
-    
-    // 'full' (Initial value 0, as the buffer starts empty) 
-    full = sem_open(SEM_FULL, O_CREAT, 0666, 0);
-    
-    // 'empty' (Initial value BUFFER_SIZE, as all slots are initially available) 
-    empty = sem_open(SEM_EMPTY, O_CREAT, 0666, BUFFER_SIZE);
-
-    if (mutex == SEM_FAILED || full == SEM_FAILED || empty == SEM_FAILED) {
-        perror("sem_open failed");
-        exit(1);
-    }
-
-    // 4. Create producer thread and wait for it to finish
-    pthread_t prod_thread;
-    pthread_create(&prod_thread, NULL, producer_thread, NULL);
-    pthread_join(prod_thread, NULL);
-
-    // 5. Cleanup Resources (Producer takes ownership of unlinking)
-    
-    // Close the semaphore descriptors
-    sem_close(mutex);
-    sem_close(full);
-    sem_close(empty);
-    
-    // Unlink semaphores to destroy them from the system
-    sem_unlink(SEM_MUTEX);
-    sem_unlink(SEM_FULL);
-    sem_unlink(SEM_EMPTY);
-    
-    // Unmap the shared memory segment
-    munmap(shared_mem, sizeof(shared_data_t));
-    
-    // Close the file descriptor
+    srand(time(NULL) * getpid()); // Seed for random numbers
+    // --- 1. Setup Shared Memory ---
+    int shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
+    if (shm_fd == -1) { perror("shm_open failed"); exit(EXIT_FAILURE); }
+    if (ftruncate(shm_fd, sizeof(SharedBuffer)) == -1) { perror("ftruncate failed"); close(shm_fd); exit(EXIT_FAILURE); }
+    resources.shm_ptr = (SharedBuffer *)mmap(0, sizeof(SharedBuffer), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
     close(shm_fd);
-    
-    // Unlink the shared memory object
-    shm_unlink(SHM_NAME);
 
+    // Initialize the shared memory structure
+    memset(resources.shm_ptr, 0, sizeof(SharedBuffer));
+    resources.shm_ptr->in = 0;
+    resources.shm_ptr->out = 0;
+    
+    // --- 2. Setup Semaphores (Unlink first for clean start) ---
+    sem_unlink(SEM_EMPTY);
+    sem_unlink(SEM_FULL);
+    sem_unlink(SEM_MUTEX);
+    
+    // Initial values: empty = BUFFER_SIZE (2 slots empty), full = 0 (0 items), mutex = 1 (unlocked)
+    resources.empty_sem = sem_open(SEM_EMPTY, O_CREAT, 0666, BUFFER_SIZE);
+    resources.full_sem  = sem_open(SEM_FULL, O_CREAT, 0666, 0);
+    resources.mutex_sem = sem_open(SEM_MUTEX, O_CREAT, 0666, 1);
+
+    // --- 3. Start Producer Thread ---
+    pthread_t prod_tid;
+    printf("Starting Producer process with buffer size %d...\n", BUFFER_SIZE);
+
+    if (pthread_create(&prod_tid, NULL, producer_thread, NULL) != 0) {
+        perror("pthread_create failed");
+        cleanup();
+        exit(EXIT_FAILURE);
+    }
+
+    pthread_join(prod_tid, NULL); // Wait for the thread (will wait indefinitely)
+    cleanup();
     return 0;
 }
