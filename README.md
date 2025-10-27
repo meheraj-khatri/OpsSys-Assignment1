@@ -2,6 +2,8 @@
 
 This repository contains the solution for the **Producer-Consumer Problem** implemented using two separate, synchronized C programs in a Linux/Unix environment.
 
+
+
 ## Program Description
 
 This program solves the classic Producer-Consumer Problem, where a **Producer** and a **Consumer** process share a bounded buffer.
@@ -12,11 +14,17 @@ This program solves the classic Producer-Consumer Problem, where a **Producer** 
 
 * **Concurrency:** The core logic runs within separate **threads** inside the producer and consumer programs.
 
+
+
 ### Synchronization Rules
 
 1.  When the table is full, the **Producer will wait**.
 2.  When there are no items, the **Consumer will wait**.
 3.  **Mutual exclusion** protects the shared buffer during access.
+
+
+
+
 
 ### Files Included
 
@@ -28,6 +36,9 @@ This program solves the classic Producer-Consumer Problem, where a **Producer** 
 
 * **README.md**: Documentation and usage instructions (this file).
 
+
+
+
 ## Usage Instructions
 
 This solution is required to be built and run in a **Linux/Unix environment**.
@@ -35,11 +46,35 @@ This solution is required to be built and run in a **Linux/Unix environment**.
 ### 1. Compilation
 The programs must be compiled using the **GNU C Compiler (`gcc`)** and linked with the pthreads and real-time libraries (`-pthread -lrt`).
 
+```
+gcc -pthread -lrt producer.c -o producer
+```
+
+and
+```
+gcc -pthread -lrt consumer.c -o consumer
+```
+
+
+
 ### 2. Execution
 Run both programs concurrently in the background. The Producer must start first to initialize the shared resources.
 
+```
+# Execute both programs concurrently
+$ ./producer & ./consumer &
+```
+
 ### 3. Stopping the Programs
 Since the programs run indefinitely (while(1)), use killall or Control + C  to terminate them.
+
+```
+$ killall producer
+$ killall consumer
+```
+
+
+
 
 ## Explanation of Key Components
 
@@ -57,6 +92,9 @@ Initialized to 1. Both processes call sem_wait() before accessing the buffer (cr
 
 ### 5. Threads
 The actual production/consumption logic runs in a separate thread inside each process, allowing for synchronous blocking operations on the semaphores.
+
+
+
 
 ## Examples & Results
 
