@@ -1,7 +1,7 @@
 # Programming Assignment #1: Producer-Consumer Problem
 
 This repository contains the solution for the **Producer-Consumer Problem** implemented using two separate, synchronized C programs in a Linux/Unix environment.
-First of all, Download all the files under this repository on your Linux and Unix Environment. After that Open Terminal on that environment where you will run command to see if the code works or not.
+First of all, Download all the files under this repository folder on your Linux and Unix Environment. After that Open Terminal on that environment where you will run command to see if the code works or not. You have to have all the files together in a single folder for the command to work. Don't scatter them arround on different folders on your computer environment.
 
 
 
