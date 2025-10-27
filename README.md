@@ -66,12 +66,7 @@ $ ./producer & ./consumer &
 ```
 
 ### 3. Stopping the Programs
-Since the programs run indefinitely (while(1)), use killall or Control + C  to terminate them.
-
-```
-$ killall producer
-$ killall consumer
-```
+Since the programs run indefinitely (while(1)), Control + C  to terminate them.
 
 
 
