@@ -1,57 +1,69 @@
-#### Programming Assignment #1: Producer-Consumer Problem
-This repository contains the solution for the Producer-Consumer Problem 1implemented using two separate, synchronized C programs in a Linux/Unix environment
+# Programming Assignment #1: Producer-Consumer Problem
 
+This repository contains the solution for the **Producer-Consumer Problem** implemented using two separate, synchronized C programs in a Linux/Unix environment.
 
-### Program Description
-This assignment implements the classic Producer-Consumer Problem where two independent processes, a Producer and a Consumer, share a bounded buffer (the "table")
-# Producer: Generates items and puts them onto the table
-# Consumer: Picks up items from the table
-# Constraint: The table can only hold two items at the same time
+## Program Description
 
-The system uses concurrency tools to ensure correct synchronization:
-The Producer waits when the table is full (completed)
-The Consumer waits when the table has no items
+This program solves the classic Producer-Consumer Problem, where a **Producer** and a **Consumer** process share a bounded buffer.
 
-## Files Included
+* **Shared Buffer ("Table"):** Implemented using **POSIX Shared Memory**. The table has a capacity of **two items**.
 
-a. producer.c
-The main program that creates the shared memory and semaphores, and runs the producing thread.
+* **Synchronization:** **POSIX Semaphores** are used to manage resource limits and enforce mutual exclusion.
 
-b. consumer.c
-The main program that links to the shared resources and runs the consuming thread.
+* **Concurrency:** The core logic runs within separate **threads** inside the producer and consumer programs.
 
-c. global.h
-Header file defining shared constants (BUFFER_SIZE, resource names) and the SharedBuffer structure.
+### Synchronization Rules
 
-d. README.md
-This file, providing program documentation, usage instructions, and example results.
+1.  When the table is full, the **Producer will wait**.
+2.  When there are no items, the **Consumer will wait**.
+3.  **Mutual exclusion** protects the shared buffer during access.
+
+### Files Included
+
+* **producer.c**: Creates the shared memory and semaphores, then runs the production thread indefinitely.
+
+* **consumer.c**: Links to the shared resources and runs the consumption thread indefinitely.
+
+* **global.h**: Defines shared constants, the `SharedBuffer` structure, and resource names.
+
+* **README.md**: Documentation and usage instructions (this file).
 
 ## Usage Instructions
-The programs are designed to be compiled and run in a Linux/Unix environment.
 
-1. Environment Setup
+This solution is required to be built and run in a **Linux/Unix environment**.
 
-Operating System: Linux/Unix is required. If you are not using Linux, you should use VirtualBox or Docker.
+### 1. Compilation
+The programs must be compiled using the **GNU C Compiler (`gcc`)** and linked with the pthreads and real-time libraries (`-pthread -lrt`).
 
-Compiler: Ensure gcc is installed.
+### 2. Execution
+Run both programs concurrently in the background. The Producer must start first to initialize the shared resources.
 
-Libraries: The code requires the pthreads library and the real-time library for POSIX semaphores and shared memory. These are linked using the flags -pthread and -lrt.
+### 3. Stopping the Programs
+Since the programs run indefinitely (while(1)), use killall or Control + C  to terminate them.
 
-2. Compilation
+## Explanation of Key Components
 
-Compile both source files using the specified flags:
+### 1. Shared Memory
+Provides a memory region accessible by both the Producer and Consumer processes.
 
-# Compile producer.c 
-$ gcc producer.c -pthread -lrt -o producer
+### 2. sem_empty
+Initialized to 2. The Producer calls sem_wait() here; it blocks if the buffer is full.
 
-# Compile consumer.c
-$ gcc consumer.c -pthread -lrt -o consumer
+### 3. sem_full
+Initialized to 0. The Consumer calls sem_wait() here; it blocks if the buffer is empty.
 
+### 4. sem_mutex
+Initialized to 1. Both processes call sem_wait() before accessing the buffer (critical section) to ensure atomic operations.
 
-3. Execution
+### 5. Threads
+The actual production/consumption logic runs in a separate thread inside each process, allowing for synchronous blocking operations on the semaphores.
 
-Execute both programs concurrently. The Producer must start first to initialize the shared resources (memory and semaphores).Bash# Execute both programs concurrently.
+## Examples & Results
 
-$ ./producer & ./consumer &
+The output below demonstrates the correct, synchronized, and continuous behavior of the programs.
 
-Manual termination via Ctrl+C or killall.
+### Screenshot 1:
+![alt text](image.png)
+
+### Screenshot 2:
+![alt text](image-1.png)
