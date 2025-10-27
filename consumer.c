@@ -9,7 +9,7 @@ void *consumer_thread(void *arg) {
 
     while (1) { // Runs continuously until manually stopped
         // Wait for a full slot (wait if buffer is empty)
-        // When there are no items, the consumer will wait. [cite: 13]
+        // When there are no items, the consumer will wait.
         if (sem_wait(resources.full_sem) == -1) {
             perror("Consumer: sem_wait(full) failed");
             break;

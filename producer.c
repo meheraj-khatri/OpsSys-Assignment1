@@ -10,7 +10,7 @@ void *producer_thread(void *arg) {
 
     while (1) { // Runs continuously until manually stopped
         //Wait for an empty slot (wait if buffer is full)
-        // When the table is completed, the producer will wait. [cite: 12]
+        // When the table is completed, the producer will wait.
         if (sem_wait(resources.empty_sem) == -1) {
             perror("Producer: sem_wait(empty) failed");
             break;

@@ -9,7 +9,7 @@
 #include <string.h>
 
 // Constants
-#define BUFFER_SIZE 2             // The table can only hold two items [cite: 12]
+#define BUFFER_SIZE 2             // The table can only hold two items at a time
 #define SHM_NAME "/prod_con_shm"  // Name for the shared memory object
 #define SEM_EMPTY "/sem_empty"    // Semaphore for empty slots (Producer waits here)
 #define SEM_FULL "/sem_full"      // Semaphore for full slots (Consumer waits here)
