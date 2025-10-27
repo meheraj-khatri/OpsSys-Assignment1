@@ -1,25 +1,57 @@
-# 🧵 Producer-Consumer Problem: Shared Memory IPC
+#### Programming Assignment #1: Producer-Consumer Problem
+This repository contains the solution for the Producer-Consumer Problem 1implemented using two separate, synchronized C programs in a Linux/Unix environment
 
-This project implements the classic **Producer-Consumer Problem** using **Inter-Process Communication (IPC)** features available in Linux/Unix, specifically **Shared Memory** and **Named POSIX Semaphores**.
 
-## 1. Program Description
+### Program Description
+This assignment implements the classic Producer-Consumer Problem where two independent processes, a Producer and a Consumer, share a bounded buffer (the "table")
+# Producer: Generates items and puts them onto the table
+# Consumer: Picks up items from the table
+# Constraint: The table can only hold two items at the same time
 
-The assignment requires two separate programs: `producer` and `consumer`. [cite_start]They communicate via a shared circular buffer (the "table") that can hold a maximum of **2 items** (`BUFFER_SIZE = 2`).
+The system uses concurrency tools to ensure correct synchronization:
+The Producer waits when the table is full (completed)
+The Consumer waits when the table has no items
 
-* The **Producer** generates random integers and deposits them into the shared buffer. [cite_start]It waits if the buffer is full.
-* The **Consumer** retrieves and removes items from the buffer. [cite_start]It waits if the buffer is empty.
-* [cite_start]Both programs run concurrently as separate processes and synchronize their access to the shared buffer using semaphores to ensure **mutual exclusion**  and proper order.
-* Each program produces/consumes a total of **10 items** (`MAX_ITEMS = 10`).
+## Files Included
 
-## 2. Usage Instructions
+a. producer.c
+The main program that creates the shared memory and semaphores, and runs the producing thread.
 
-### Environment
+b. consumer.c
+The main program that links to the shared resources and runs the consuming thread.
 
-[cite_start]This project must be compiled and executed on a **Linux/Unix** environment using C/C++[cite: 7]. Ensure the necessary libraries for pthreads and real-time extensions are available.
+c. global.h
+Header file defining shared constants (BUFFER_SIZE, resource names) and the SharedBuffer structure.
 
-### Compilation
+d. README.md
+This file, providing program documentation, usage instructions, and example results.
 
-[cite_start]Compile both files using the `gcc` command, linking with the **pthread** (`-pthread`) and **real-time** (`-lrt`) libraries[cite: 17, 18]:
+## Usage Instructions
+The programs are designed to be compiled and run in a Linux/Unix environment.
 
-```bash
-$gcc producer.c -pthread -lrt -o producer$ gcc consumer.c -pthread -lrt -o consumer
+1. Environment Setup
+
+Operating System: Linux/Unix is required. If you are not using Linux, you should use VirtualBox or Docker.
+
+Compiler: Ensure gcc is installed.
+
+Libraries: The code requires the pthreads library and the real-time library for POSIX semaphores and shared memory. These are linked using the flags -pthread and -lrt.
+
+2. Compilation
+
+Compile both source files using the specified flags:
+
+# Compile producer.c 
+$ gcc producer.c -pthread -lrt -o producer
+
+# Compile consumer.c
+$ gcc consumer.c -pthread -lrt -o consumer
+
+
+3. Execution
+
+Execute both programs concurrently. The Producer must start first to initialize the shared resources (memory and semaphores).Bash# Execute both programs concurrently.
+
+$ ./producer & ./consumer &
+
+Manual termination via Ctrl+C or killall.
