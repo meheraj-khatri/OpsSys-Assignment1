@@ -34,7 +34,7 @@ void *consumer_thread(void *arg) {
             break;
         }
 
-        // 4. Signal an empty slot (increase count of empty slots)
+        // Signal an empty slot (increase count of empty slots)
         if (sem_post(resources.empty_sem) == -1) {
             perror("Consumer: sem_post(empty) failed");
             break;
